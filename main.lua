@@ -15,7 +15,7 @@ local Configuration = require(FileName);
 if Configuration.Settings.SuperuserCommand ~= "" then Configuration.Settings.SuperuserCommand = Configuration.Settings.SuperuserCommand.. " "; end
 
 local DebugOptions = { NONE=0, REMOVAL=1 };
-local DebugState = DebugOptions.REMOVAL;
+local DebugState = DebugOptions.NONE;
 
 local Colours = {
     Reset = "\27[0m",
@@ -96,11 +96,17 @@ local function create_path(Location)
         Confirmation = ensure_confirmation();
     end
     if Confirmation then
-        print(Colours.Green.. "Creating path: ".. Location.. Colours.Reset);
-        if os.execute(Configuration.Settings.SuperuserCommand.. "mkdir -p ".. Location) then
+        if os.execute("mkdir -p ".. Location) then
+            print(Colours.Green.. "[LOG] Created path: ".. Location.. Colours.Reset);
             return;
         end
     end
+    print(Colours.Red.. "[ERROR] Unable to create path at: ".. Location .. ", retrying as superuser!");
+    if os.execute(Configuration.Settings.SuperuserCommand.. "mkdir -p ".. Location) then
+        print(Colours.Green.. "[LOG] Created path: ".. Location.. Colours.Reset);
+        return;
+    end
+
     fake_error("Unable to create path at: ".. Location, -2);
 end
 
@@ -193,7 +199,6 @@ if CacheFileContents ~= nil then
     end
 end
 
--- *NEW ADDED PART* --
 --> Do the same for above, but for any new pairs that may yet not be cached (as it is their first run)
 for SymlinkPath, SourcePath in pairs(Configuration.Symlinks) do
     remove_invalid_links(SymlinkPath, SourcePath);
@@ -207,6 +212,12 @@ for SymlinkPath, SourcePath in pairs(Configuration.Symlinks) do
     if os.execute(Configuration.Settings.SuperuserCommand .."test -e ".. SymlinkPath) == nil then
         --> Ensure that source path exists
         if os.execute(Configuration.Settings.SuperuserCommand .."test -e ".. SourcePath) == nil then
+local SymlinkDir = SymlinkPath:match("(.*/)")
+
+if SymlinkDir then
+    -- Create the directory structure first
+    os.execute(Configuration.Settings.SuperuserCommand .. "mkdir -p " .. SymlinkDir)
+end
             fake_error("Source path does not exist: ".. SourcePath, -1);
         end
         --> Create the symlink
@@ -216,8 +227,18 @@ for SymlinkPath, SourcePath in pairs(Configuration.Symlinks) do
             Confirmation = ensure_confirmation();
         end
         if Confirmation then
-            os.execute(Configuration.Settings.SuperuserCommand .."ln -s ".. SourcePath .. " ".. SymlinkPath);
-            print(Colours.Green .."[LOG] Created Symlink, Source: ".. SourcePath .. ", Symlink File: ".. SymlinkPath ..Colours.Reset);
+
+            --> Create the path if it doesn't exist
+            local SymlinkDir = SymlinkPath:match("(.*/)")
+            if SymlinkDir then
+                create_path(SymlinkDir);
+            end
+
+            if os.execute(Configuration.Settings.SuperuserCommand .."ln -s ".. SourcePath .. " ".. SymlinkPath) then
+                print(Colours.Green .."[LOG] Created Symlink, Source: ".. SourcePath .. ", Symlink File: ".. SymlinkPath ..Colours.Reset);
+            else
+                print(Colours.Red .."[ERROR] Failed to Create Symlink, Source: ".. SourcePath .. ", Symlink File: ".. SymlinkPath ..Colours.Reset)
+            end
         end
     end
 
