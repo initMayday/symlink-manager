@@ -99,12 +99,13 @@ local function create_path(Location)
         if os.execute("mkdir -p ".. Location) then
             print(Colours.Green.. "[LOG] Created path: ".. Location.. Colours.Reset);
             return;
+        else
+            print(Colours.Red.. "[ERROR] Unable to create path at: ".. Location .. ", retrying as superuser!");
+            if os.execute(Configuration.Settings.SuperuserCommand.. "mkdir -p ".. Location) then
+                print(Colours.Green.. "[LOG] Created path: ".. Location.. Colours.Reset);
+                return;
+            end
         end
-    end
-    print(Colours.Red.. "[ERROR] Unable to create path at: ".. Location .. ", retrying as superuser!");
-    if os.execute(Configuration.Settings.SuperuserCommand.. "mkdir -p ".. Location) then
-        print(Colours.Green.. "[LOG] Created path: ".. Location.. Colours.Reset);
-        return;
     end
 
     fake_error("Unable to create path at: ".. Location, -2);
@@ -231,7 +232,9 @@ end
             --> Create the path if it doesn't exist
             local SymlinkDir = SymlinkPath:match("(.*/)")
             if SymlinkDir then
-                create_path(SymlinkDir);
+                if os.execute(Configuration.Settings.SuperuserCommand .."test -d ".. SymlinkDir) == nil then
+                    create_path(SymlinkDir);
+                end
             end
 
             if os.execute(Configuration.Settings.SuperuserCommand .."ln -s ".. SourcePath .. " ".. SymlinkPath) then
