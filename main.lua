@@ -1,3 +1,14 @@
+local Colours = {
+    Reset = "\27[0m",
+    Red = "\27[31m",
+    Green = "\27[32m",
+    Yellow = "\27[33m",
+    Blue = "\27[34m",
+    Magenta = "\27[35m",
+    Cyan = "\27[36m",
+    White = "\27[37m",
+}
+
 --<> Global Variables
 local CacheFileName = "symlinks.cache";
 local RelativeScriptPath = debug.getinfo(1, "S").source:sub(2):match("(.*/)") or "./"
@@ -13,42 +24,27 @@ end
 
 --> Get the configuration, depending on the hostname, or the default otherwise
 local Configuration = require(FileName);
-local Handle = io.popen("uname -n")
-local Hostname = Handle:read("*a"):gsub("\n+$", "") --> Clean up trailing \n
-Handle:close()
-if Handle ~= nil and Configuration[Hostname] ~= nil then
+local H1 = io.popen("uname -n")
+local Hostname = H1:read("*a"):gsub("\n+$", "") --> Clean up trailing \n
+H1:close()
+if H1 ~= nil and Configuration[Hostname] ~= nil then
     Configuration = Configuration[Hostname]
 else
     if Configuration[false] ~= nil then
         Configuration = Configuration[false]
     else
-        print("Hostname was: ".. Hostname .."but no configuration provided, nor any default configuration")
+        print(Colours.Red .."[ERROR] Hostname was: ".. Hostname
+            .."but no configuration provided, nor any default configuration".. Colours.Reset)
         return
     end
 end
 
-if Configuration.Settings.SuperuserCommand ~= "" then Configuration.Settings.SuperuserCommand = Configuration.Settings.SuperuserCommand.. " "; end
+if Configuration.Settings.SuperuserCommand ~= "" then
+    Configuration.Settings.SuperuserCommand = Configuration.Settings.SuperuserCommand.. " ";
+end
 
 local DebugOptions = { NONE=0, REMOVAL=1 };
 local DebugState = DebugOptions.NONE;
-
-local Colours = {
-    Reset = "\27[0m",
-    Red = "\27[31m",
-    Green = "\27[32m",
-    Yellow = "\27[33m",
-    Blue = "\27[34m",
-    Magenta = "\27[35m",
-    Cyan = "\27[36m",
-    White = "\27[37m",
-};
-
---<> Activation Message
-if Configuration.Settings.RandomActivationMessage == true and Configuration.Settings.Licensed == false then
-    if math.random(0, 6) == 1 then -- 1 in 6 chance of showing
-        print(Colours.Cyan .."[ACTIVATION] If you find this product useful, please purchase a license from: https://ko-fi.com/s/f7d3444a62, it really helps!".. Colours.Reset);
-    end
-end
 
 --<> Functions
 --> Different Debug Levels
@@ -160,8 +156,8 @@ if string.sub(Configuration.Settings.CachePath, -1) ~= "/" then
     Configuration.Settings.CachePath = Configuration.Settings.CachePath.. "/";
 end
 
---> Test if the path exists
-local CacheDirectoryExists = os.execute(Configuration.Settings.SuperuserCommand .."test -d ".. Configuration.Settings.CachePath);
+--> Test if the path exists, without superuser
+local CacheDirectoryExists = os.execute("test -d ".. Configuration.Settings.CachePath);
 if CacheDirectoryExists == nil then
     print("[LOG] (PLEASE CHECK THE DIRECTORY IS NOT DEFAULT) Cache Directory doesn't exist, generating a new one at: ".. Configuration.Settings.CachePath ..CacheFileName);
 
@@ -169,20 +165,20 @@ if CacheDirectoryExists == nil then
     create_path(Configuration.Settings.CachePath);
 end
 
---> Test if the File exists
-local CacheFileExists = os.execute(Configuration.Settings.SuperuserCommand .."test -f ".. Configuration.Settings.CachePath ..CacheFileName);
+--> Test if the File exists, without superuser
+local CacheFileExists = os.execute("test -f ".. Configuration.Settings.CachePath ..CacheFileName);
 
 if CacheFileExists == nil then
     print("[LOG] Cache File doesn't exist, generating a new one at: ".. Configuration.Settings.CachePath ..CacheFileName);
 
-    --> Create the file if it doesn't exist
-    if not os.execute(Configuration.Settings.SuperuserCommand.. "touch ".. Configuration.Settings.CachePath ..CacheFileName) then
+    --> Create the file if it doesn't exist. Do this without superuser.
+    if not os.execute("touch ".. Configuration.Settings.CachePath ..CacheFileName) then
         fake_error("Failed to create Cache File at: ".. Configuration.Settings.CachePath, -1);
     end
 end
 
-print("[LOG] Reading Cache File!")
-local Handle = io.popen(Configuration.Settings.SuperuserCommand .."cat ".. Configuration.Settings.CachePath ..CacheFileName);
+print("[LOG] Reading Cache File!") --> Read without superuser
+local Handle = io.popen("cat ".. Configuration.Settings.CachePath ..CacheFileName);
 local CacheFileContents = Handle:read(); Handle:close();
 
 if CacheFileContents ~= nil then
@@ -264,9 +260,6 @@ end
     NewCache = NewCache.. SymlinkPath.."\\0"..SourcePath.."\\0";
 end
 
---> Write to cache file
+--> Write to cache file, without superuser
 print("[LOG] Writing Cache File!")
-os.execute(Configuration.Settings.SuperuserCommand.. "bash -c \'printf \"".. NewCache .."\" > " .. Configuration.Settings.CachePath .. CacheFileName.. "'");
-
---> Original way, sudo failed to work with redirection of >
---os.execute(Configuration.Settings.SuperuserCommand.. "printf \"".. NewCache .."\" > " .. Configuration.Settings.CachePath .. CacheFileName);
+os.execute("bash -c \'printf \"".. NewCache .."\" > " .. Configuration.Settings.CachePath .. CacheFileName.. "'");
