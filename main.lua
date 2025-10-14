@@ -11,7 +11,22 @@ if arg[1] ~= nil then
     package.path = package.path .. ";" .. Directory .. "/?.lua"
 end
 
+--> Get the configuration, depending on the hostname, or the default otherwise
 local Configuration = require(FileName);
+local Handle = io.popen("uname -n")
+local Hostname = Handle:read("*a"):gsub("\n+$", "") --> Clean up trailing \n
+Handle:close()
+if Handle ~= nil and Configuration[Hostname] ~= nil then
+    Configuration = Configuration[Hostname]
+else
+    if Configuration[false] ~= nil then
+        Configuration = Configuration[false]
+    else
+        print("Hostname was: ".. Hostname .."but no configuration provided, nor any default configuration")
+        return
+    end
+end
+
 if Configuration.Settings.SuperuserCommand ~= "" then Configuration.Settings.SuperuserCommand = Configuration.Settings.SuperuserCommand.. " "; end
 
 local DebugOptions = { NONE=0, REMOVAL=1 };
