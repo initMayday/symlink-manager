@@ -61,7 +61,7 @@ return Configuration
 Note that the table names cannot be changed, they must be named this way. This example file can be found in example.lua.
 
 ## Packages
-Arch (PKGBUILD)
+[Arch User Repository](https://aur.archlinux.org/packages/symlink-manager)
 
 ##  Licensing
 Symlink-Manager utilises the CC BY-NC-SA 4.0 license, following this [interpretation](https://github.com/initMayday/licensing/blob/master/CC-BY-NC-SA.md).

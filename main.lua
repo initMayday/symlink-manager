@@ -39,18 +39,19 @@ else
     end
 end
 
+--> For ease
 if Configuration.Settings.SuperuserCommand ~= "" then
     Configuration.Settings.SuperuserCommand = Configuration.Settings.SuperuserCommand.. " ";
 end
 
 local DebugOptions = { NONE=0, REMOVAL=1 };
-local DebugState = DebugOptions.NONE;
+local DebugState = DebugOptions.REMOVAL;
 
 --<> Functions
 --> Different Debug Levels
 local function debug_print(Message, RequiredState)
     if RequiredState == DebugState then
-        print("[DEBUG] ".. Message);
+        print("["..RequiredState.."] ".. Message);
     end
 end
 
@@ -123,30 +124,39 @@ local function create_path(Location)
 end
 
 local function remove_invalid_links(SymlinkPath, SourcePath)
-        --> Check if the symlink is still explicitly listed
-        if Configuration.Symlinks[SymlinkPath] ~= nil then
-            --> Expand variables, it is still listed
-            SymlinkPath = real_path(SymlinkPath);
-            SourcePath = real_path(SourcePath);
-            --> Check if the path is a symlink
-            if os.execute(Configuration.Settings.SuperuserCommand .."test -L " ..SymlinkPath) then
-                --> Check if the symlink points to the intended source directory
-                local Handle = io.popen(Configuration.Settings.SuperuserCommand .."readlink ".. SymlinkPath);
-                if Handle:read() ~= SourcePath then
-                    debug_print("Removal Reason 1 (Symlink Does not point to intended directory)", DebugOptions.REMOVAL);
-                    remove_path(SymlinkPath);
-                end
-                Handle:close();
-            else
-                debug_print("Removal Reason 2 (Path is not a symlink)", DebugOptions.REMOVAL);
+    --> Check if the symlink is still explicitly listed
+    if Configuration.Symlinks[SymlinkPath] ~= nil then
+        --> Expand variables, it is still listed [NO NEED TO DO THIS ANY LONGER - WE DO REAL_PATH PRE-EMPTIVELY ON ALL SYMLINKS]
+        -- SymlinkPath = real_path(SymlinkPath);
+        -- SourcePath = real_path(SourcePath);
+        --> Check if the path is a symlink
+        if os.execute(Configuration.Settings.SuperuserCommand .."test -L " ..SymlinkPath) then
+            --> Check if the symlink points to the intended source directory
+            local Handle = io.popen(Configuration.Settings.SuperuserCommand .."readlink ".. SymlinkPath);
+            local LinkPath = Handle:read()
+            if LinkPath ~= SourcePath then
+                debug_print("Removal Reason 1 (Symlink Does not point to intended directory)", DebugOptions.REMOVAL);
                 remove_path(SymlinkPath);
             end
+            Handle:close();
         else
-            --> Symlink is no longer explicitly listed, we can remove it
-            debug_print("Removal Reason 3 (Symlink is no longer required)", DebugOptions.REMOVAL);
+            debug_print("Removal Reason 2 (Path is not a symlink)", DebugOptions.REMOVAL);
             remove_path(SymlinkPath);
         end
+    else
+        --> Symlink is no longer explicitly listed, we can remove it
+        debug_print("Removal Reason 3 (Symlink is no longer required)", DebugOptions.REMOVAL);
+        remove_path(SymlinkPath);
+    end
+end
 
+--> Expand all variables in the symlink pairs, so we always work with pure paths, with no shell vars
+do
+    local ExpandedSymlinks = {}
+    for Index, Value in pairs(Configuration.Symlinks) do
+        ExpandedSymlinks[real_path(Index)] = real_path(Value);
+    end
+    Configuration.Symlinks = ExpandedSymlinks;
 end
 
 --<> Manage Cache
