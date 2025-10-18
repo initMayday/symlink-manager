@@ -83,8 +83,8 @@ local function real_path(Path)
 end
 
 --> Removes the target path
-local function remove_path(Location)
-    if os.execute(Configuration.Settings.SuperuserCommand .."test -e " ..Location) then
+local function remove_path(Location, SkipCheck)
+    if os.execute(Configuration.Settings.SuperuserCommand .."test -e " ..Location) or SkipCheck then
         local Confirmation = true;
         if Configuration.Settings.RemovePathConfirmation == true then
             io.write(Colours.Yellow.. "[INPUT REQUIRED] Are you sure you would like to REMOVE the path: ".. Location.. " (y/n) ".. Colours.Reset);
@@ -97,6 +97,8 @@ local function remove_path(Location)
             end
         end
         fake_error("Unable to remove path: ".. Location, -2);
+    else
+        print("Unable to remove path: ".. Location .." - it does not exist")
     end
 end
 
@@ -136,7 +138,7 @@ local function remove_invalid_links(SymlinkPath, SourcePath)
             local LinkPath = Handle:read()
             if LinkPath ~= SourcePath then
                 debug_print("Removal Reason 1 (Symlink Does not point to intended directory)", DebugOptions.REMOVAL);
-                remove_path(SymlinkPath);
+                remove_path(SymlinkPath, true); --> Pass the skip check variable as broken symlinks will make test -e fail
             end
             Handle:close();
         else
@@ -222,6 +224,7 @@ if CacheFileContents ~= nil then
 end
 
 --> Do the same for above, but for any new pairs that may yet not be cached (as it is their first run)
+--> BUG: May contain duplicates from Cache! Harmless, will just fail non-obstructively, but should fix 
 for SymlinkPath, SourcePath in pairs(Configuration.Symlinks) do
     remove_invalid_links(SymlinkPath, SourcePath);
 end
