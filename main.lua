@@ -193,6 +193,12 @@ print("[LOG] Reading Cache File!") --> Read without superuser
 local Handle = io.popen("cat ".. Configuration.Settings.CachePath ..CacheFileName);
 local CacheFileContents = Handle:read(); Handle:close();
 
+--> Request superuser permissions here, so we can exit early if it fails
+print("[LOG] Requesting SuperUser");
+if not os.execute(Configuration.Settings.SuperuserCommand.. "echo \"[LOG] SuperUser granted\"") then
+    fake_error("SuperUser denied!");
+end
+
 if CacheFileContents ~= nil then
     --> Split the string every 2 null bytes (as symlinks come in diretory pairs)
     local Splits = {};
