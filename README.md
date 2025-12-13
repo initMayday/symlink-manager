@@ -47,5 +47,5 @@ Note that the table names cannot be changed, they must be named this way. This e
 [Arch User Repository](https://aur.archlinux.org/packages/symlink-manager)
 
 ##  Licensing
-Symlink-Manager utilises the CC BY-NC-SA 4.0 license, following this [interpretation](https://github.com/initMayday/licensing/blob/master/CC-BY-NC-SA.md).
+Symlink-manager is licensed under `AGPL-3.0-or-later`   
 You can purchase the program for 3GBP (or equivalent) [here](https://github.com/initMayday/licensing/blob/master/payment.md).
