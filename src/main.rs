@@ -1,6 +1,9 @@
+mod files;
+mod utils;
 
 use mlua::{Lua, LuaSerdeExt};
 use serde::Deserialize;
+use tokio::task::JoinSet;
 use std::{collections::HashMap, fs};
 
 #[derive(Debug, Deserialize)]
@@ -21,7 +24,8 @@ struct Settings {
     superuser_command: String,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let lua_source = fs::read_to_string("example.lua")?;
     let lua = Lua::new();
 
@@ -29,7 +33,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let value = chunk.eval::<mlua::Value>()?;
     let config: Config = lua.from_value(value)?;
 
-    println!("{:#?}", config);
-
+    
     Ok(())
 }
