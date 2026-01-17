@@ -1,0 +1,8 @@
+[package]
+name = "desym"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+mlua = { version = "0.11.5", features = ["luajit", "serde"] }
+serde = { version = "1.0.228", features = ["derive"] }
