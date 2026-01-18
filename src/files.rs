@@ -11,12 +11,10 @@ async fn write_to_file(path: &Path, content: String, lock: Arc<Semaphore>) {
     let settings = crate::utils::settings();
     match fs::write(path, content.as_bytes()).await {
         Ok(_) => {
-            let _permit = lock.acquire().await;
             write_suc(format!("Wrote to, Path: {}", path.display()).as_str());
         }
         Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
-            let permit = lock.acquire().await; // We lock on superuser, because it probably asks
-                                               // for password
+            let _permit = lock.acquire().await;
             let output = Command::new(&settings.superuser_command)
                 .arg("bash")
                 .arg("-c")
@@ -26,17 +24,15 @@ async fn write_to_file(path: &Path, content: String, lock: Arc<Semaphore>) {
                 .arg(path)
                 .output()
                 .await;
-            drop(permit);
+            drop(_permit);
 
             match output {
                 Ok(output) if output.status.success() => {
-                    let _permit = lock.acquire().await;
                     write_suc(
                         format!("Wrote to (superuser), Path: {}", path.display()).as_str(),
                     );
                 }
                 Ok(output) => {
-                    let _permit = lock.acquire().await;
                     write_err(
                         format!(
                             "Failed to write to file (superuser), Path: {}, Exit: {}, Stderr: {}",
@@ -48,7 +44,6 @@ async fn write_to_file(path: &Path, content: String, lock: Arc<Semaphore>) {
                     );
                 }
                 Err(err) => {
-                    let _permit = lock.acquire().await;
                     write_err(
                         format!(
                             "Failed to write to file (superuser), Path: {}, Error: {}",
@@ -61,7 +56,6 @@ async fn write_to_file(path: &Path, content: String, lock: Arc<Semaphore>) {
             }
         }
         Err(err) => {
-            let _permit = lock.acquire().await;
             write_err(
                 format!(
                     "Failed to write to file, Path: {}, Error: {}",
@@ -84,7 +78,6 @@ pub async fn process(config: &Config) {
             let file_path = Path::new(&path);
             if fs::try_exists(file_path).await.unwrap() {
                 if file_path.is_dir() {
-                    let _permit = lock.acquire().await;
                     write_err(
                         format!(
                             "Failed to write to, Path: {}, as this is a directory!",

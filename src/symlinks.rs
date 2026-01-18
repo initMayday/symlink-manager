@@ -28,13 +28,12 @@ async fn remove_path(path: &Path, lock: Arc<Semaphore>) -> bool {
 
         match result {
             Ok(()) => {
-                let _permit = lock.acquire().await;
                 write_suc(format!("Removed path: {}", path.display()).as_str());
                 return true;
             }
             Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
                 let settings = utils::settings();
-                let permit = lock.acquire().await;
+                let _permit = lock.acquire().await;
                 let output = Command::new(&settings.superuser_command)
                     .arg("rm")
                     .arg("-rf")
@@ -42,14 +41,12 @@ async fn remove_path(path: &Path, lock: Arc<Semaphore>) -> bool {
                     .output()
                     .await
                     .unwrap();
-                drop(permit);
+                drop(_permit);
 
                 if output.status.success() {
-                    let _permit = lock.acquire().await;
                     write_suc(format!("Removed path (superuser): {}", path.display()).as_str());
                     return true;
                 } else {
-                    let _permit = lock.acquire().await;
                     write_err(
                         format!(
                             "Failed, could not remove path: {}, Err: {}",
@@ -62,7 +59,6 @@ async fn remove_path(path: &Path, lock: Arc<Semaphore>) -> bool {
                 }
             }
             Err(err) => {
-                let _permit = lock.acquire().await;
                 write_err(
                     format!(
                         "Failed, could not remove path: {}, Err: {}",
@@ -75,7 +71,6 @@ async fn remove_path(path: &Path, lock: Arc<Semaphore>) -> bool {
             }
         }
     } else {
-        let _permit = lock.acquire().await;
         write_err(format!("Aborting, could not remove path: {}", path.display()).as_str());
         return false;
     }
@@ -84,7 +79,6 @@ async fn remove_path(path: &Path, lock: Arc<Semaphore>) -> bool {
 async fn create_symlink(base_path: &Path, symlink_path: &Path, lock: Arc<Semaphore>) -> bool {
     match unix_fs::symlink(base_path, symlink_path) {
         Ok(()) => {
-            let _permit = lock.acquire().await;
             write_suc(
                 format!(
                     "Created symlink: {} -> {}",
@@ -97,7 +91,7 @@ async fn create_symlink(base_path: &Path, symlink_path: &Path, lock: Arc<Semapho
         }
         Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
             let settings = utils::settings();
-            let permit = lock.acquire().await;
+            let _permit = lock.acquire().await;
             let output = Command::new(&settings.superuser_command)
                 .arg("ln")
                 .arg("-s")
@@ -106,10 +100,9 @@ async fn create_symlink(base_path: &Path, symlink_path: &Path, lock: Arc<Semapho
                 .output()
                 .await
                 .unwrap();
-            drop(permit);
+            drop(_permit);
 
             if output.status.success() {
-                let _permit = lock.acquire().await;
                 write_suc(
                     format!(
                         "Created symlink (superuser): {} -> {}",
@@ -120,7 +113,6 @@ async fn create_symlink(base_path: &Path, symlink_path: &Path, lock: Arc<Semapho
                 );
                 return true;
             } else {
-                let _permit = lock.acquire().await;
                 write_err(
                     format!(
                         "Failed, could not create symlink (superuser): {} -> {}, Err: {}",
@@ -134,7 +126,6 @@ async fn create_symlink(base_path: &Path, symlink_path: &Path, lock: Arc<Semapho
             }
         }
         Err(err) => {
-            let _permit = lock.acquire().await;
             write_err(
                 format!(
                     "Failed, could not create symlink: {} -> {}, Err: {}",
@@ -164,7 +155,6 @@ pub async fn process(config: &Config) {
                         let link_target = match fs::read_link(symlink_path).await {
                             Ok(target) => target,
                             Err(err) => {
-                                let _permit = lock.acquire().await;
                                 write_err(
                                     format!(
                                         "Failed, could not read symlink target: {}, Err: {}",
@@ -197,7 +187,6 @@ pub async fn process(config: &Config) {
                 }
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {}
                 Err(err) => {
-                    let _permit = lock.acquire().await;
                     write_err(
                         format!(
                             "Failed, could not stat path: {}, Err: {}",
