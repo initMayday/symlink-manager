@@ -94,7 +94,7 @@ pub fn write_suc(message: &str) {
 }
 
 pub async fn get_confirmation(message: &str, lock: Arc<Semaphore>) -> bool {
-    let _ = lock.acquire().await;
+    let _permit = lock.acquire().await;
     print!("{} {} {}", "[CONFIRM]".bright_purple(), message, "[Y/n] ");
     io::stdout().flush().unwrap();
 

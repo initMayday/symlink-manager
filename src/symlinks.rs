@@ -1,5 +1,7 @@
 use std::{io, path::Path, sync::Arc};
+use std::os::unix::fs as unix_fs;
 
+use owo_colors::OwoColorize;
 use tokio::{fs, process::Command, sync::Semaphore, task::JoinSet};
 
 use crate::{
@@ -79,26 +81,95 @@ async fn remove_path(path: &Path, lock: Arc<Semaphore>) -> bool {
     }
 }
 
+async fn create_symlink(base_path: &Path, symlink_path: &Path, lock: Arc<Semaphore>) -> bool {
+    match unix_fs::symlink(base_path, symlink_path) {
+        Ok(()) => {
+            let _ = lock.acquire().await;
+            write_suc(
+                format!(
+                    "Created symlink: {} -> {}",
+                    symlink_path.display(),
+                    base_path.display()
+                )
+                .as_str(),
+            );
+            return true;
+        }
+        Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
+            let settings = utils::settings();
+            let permit = lock.acquire().await;
+            let output = Command::new(&settings.superuser_command)
+                .arg("ln")
+                .arg("-s")
+                .arg(base_path)
+                .arg(symlink_path)
+                .output()
+                .await
+                .unwrap();
+            drop(permit);
+
+            if output.status.success() {
+                let _ = lock.acquire().await;
+                write_suc(
+                    format!(
+                        "Created symlink (superuser): {} -> {}",
+                        base_path.display(),
+                        symlink_path.display()
+                    )
+                    .as_str(),
+                );
+                return true;
+            } else {
+                let _ = lock.acquire().await;
+                write_err(
+                    format!(
+                        "Failed, could not create symlink (superuser): {} -> {}, Err: {}",
+                        base_path.display(),
+                        symlink_path.display(),
+                        String::from_utf8_lossy(&output.stderr)
+                    )
+                    .as_str(),
+                );
+                return false;
+            }
+        }
+        Err(err) => {
+            let _ = lock.acquire().await;
+            write_err(
+                format!(
+                    "Failed, could not create symlink: {} -> {}, Err: {}",
+                    base_path.display(),
+                    symlink_path.display(),
+                    err
+                )
+                .as_str(),
+            );
+            return false;
+        }
+    }
+}
+
 pub async fn process(config: &Config) {
     let mut set = JoinSet::new();
     let lock = Arc::new(Semaphore::new(1));
 
-    for (base_path, symlink_path) in config.files.clone() {
+    for (base_path, symlink_path) in config.symlinks.clone() {
         let lock = Arc::clone(&lock);
         set.spawn(async move {
             let file_path = Path::new(&base_path);
-            if fs::try_exists(file_path).await.unwrap() {
+            let symlink_path = Path::new(&symlink_path);
+            if fs::try_exists(symlink_path).await.unwrap() {
                 // Check it points to the right place
-                let metadata = fs::symlink_metadata(file_path).await.unwrap();
+                let metadata = fs::symlink_metadata(symlink_path).await.unwrap();
                 if metadata.file_type().is_symlink() {
                     // Check it points to the right file, else, remove it
-                    if symlink_path == fs::read_link(&file_path).await.unwrap() {
+                    if symlink_path == fs::read_link(&symlink_path).await.unwrap() {
                         return
                     } else {
-                        remove_path(&file_path, lock.clone()).await;
+                        remove_path(&symlink_path, lock.clone()).await;
                     }
                 } else {
-                    remove_path(&file_path, lock.clone()).await;
+                    remove_path(&symlink_path, lock.clone()).await;
                 }
             }
 
@@ -106,12 +177,14 @@ pub async fn process(config: &Config) {
             // Ensure the parent directories exist
             if let Some(parent) = file_path.parent() {
                 if !fs::try_exists(parent).await.unwrap() {
-                    if !utils::create_path(parent, lock).await {
+                    if !utils::create_path(parent, lock.clone()).await {
                         return;
                     }
                 }
             }
 
+            println!("creating {}", file_path.display());
+            create_symlink(file_path, symlink_path, lock).await;
             
         });
     }
