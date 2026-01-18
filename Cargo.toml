@@ -5,4 +5,6 @@ edition = "2024"
 
 [dependencies]
 mlua = { version = "0.11.5", features = ["luajit", "serde"] }
+owo-colors = "4.2.3"
 serde = { version = "1.0.228", features = ["derive"] }
+tokio = { version = "1.49.0", features = ["full"] }

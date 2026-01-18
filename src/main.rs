@@ -33,6 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let value = chunk.eval::<mlua::Value>()?;
     let config: Config = lua.from_value(value)?;
 
-    
+    files::process(&config).await;
+
     Ok(())
 }

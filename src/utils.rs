@@ -11,7 +11,7 @@ pub fn write_suc(message: &str) {
 }
 
 pub fn get_confirmation(message: &str) -> bool {
-    print!("{} {} {}", "[CONFIRM]".bright_purple(), message, " [Y/n]");
+    print!("{} {} {}", "[CONFIRM]".bright_purple(), message, "[Y/n] ");
     io::stdout().flush().unwrap();
 
     let mut input = String::new();

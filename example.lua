@@ -1,7 +1,11 @@
 local Configuration = {
-    Symlinks = {
+    Files = {
         -- Symlink File            Source File
-        ["/home/user/folder1"] = "/home/user/folder2",
+        ["/home/pika/coolfile.txt"] = "lmaobozoratioscrrt",
+    },
+
+    Symlinks = {
+
     },
 
     Settings = {

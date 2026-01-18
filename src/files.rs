@@ -4,7 +4,7 @@ use tokio::{fs, sync::Semaphore, task::JoinSet};
 
 use crate::{
     Config,
-    utils::{write_err, write_suc},
+    utils::{get_confirmation, write_err, write_suc},
 };
 
 async fn write_to_file(path: &Path, content: String, lock: Arc<Semaphore>) {
@@ -27,7 +27,7 @@ async fn write_to_file(path: &Path, content: String, lock: Arc<Semaphore>) {
     }
 }
 
-async fn process(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn process(config: &Config) {
     let mut set = JoinSet::new();
     let lock = Arc::new(Semaphore::new(1));
 
@@ -35,9 +35,9 @@ async fn process(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
         let lock = Arc::clone(&lock);
         set.spawn(async move {
             let file_path = Path::new(&path);
-            if file_path.exists() {
+            if fs::try_exists(file_path).await.unwrap() {
                 if file_path.is_dir() {
-                    let _ = lock.acquire();
+                    let _ = lock.acquire().await;
                     write_err(
                         format!(
                             "Failed to write to, Path: {}, as this is a directory!",
@@ -45,6 +45,7 @@ async fn process(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
                         )
                         .as_str(),
                     );
+                    return
                 }
 
                 let old_content = fs::read_to_string(file_path).await.unwrap();
@@ -53,16 +54,44 @@ async fn process(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
                     write_to_file(&file_path, new_content, lock).await;
                 }
             } else {
-                // Check if the path exists - create it if it doesn't
-                // Create the file
-                // Retry either of these as sudo if they fail due to perms
+                
+                // Ensure the parent directories exist
+                if let Some(parent) = file_path.parent() {
+                    if !fs::try_exists(parent).await.unwrap() {
+                        let confirmation = get_confirmation(
+                            format!(
+                                "The path {}, does not exist. It must exist in order to create {}. Would you like to do this?",
+                                parent.display(),
+                                file_path.display(),
+                            ).as_str()
+                        );
+
+                        let mut created_path = confirmation;
+
+                        if confirmation {
+                            if let Err(err) = fs::create_dir_all(parent).await {
+                                write_err(format!("Failed to create path: {}, error: {}", parent.display(), err).as_str());
+                                created_path = false;
+                            }
+                        }
+
+                        if created_path {
+                            write_suc(format!("Created path: {}", parent.display()).as_str());
+                        } else {
+                            write_err(format!("Aborting, could not create path: {}", parent.display()).as_str());
+                            return
+                        }
+                    }
+                }
+
+                // Create the file, and write to it
+                write_to_file(file_path, new_content, lock).await;
+
+
             }
         });
     }
 
-    while let Some(res) = set.join_next().await {
-        res?;
+    while let Some(_res) = set.join_next().await {
     }
-
-    Ok(())
 }
