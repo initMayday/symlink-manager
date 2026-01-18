@@ -1,11 +1,11 @@
 use std::{
     io::{self, Write},
     path::Path,
-    sync::OnceLock,
+    sync::{Arc, OnceLock},
 };
 
 use owo_colors::OwoColorize;
-use tokio::{fs, process::Command};
+use tokio::{fs, process::Command, sync::Semaphore};
 
 use crate::Settings;
 
@@ -19,23 +19,26 @@ pub fn settings() -> &'static Settings {
     SETTINGS.get().expect("settings not initialized")
 }
 
-pub async fn create_path(path: &Path) -> bool {
+pub async fn create_path(path: &Path, lock: Arc<Semaphore>) -> bool {
     let confirmation = get_confirmation(
         format!(
             "The path {}, does not exist. Would you like to do this?",
             path.display(),
         )
         .as_str(),
-    );
+        lock.clone(),
+    ).await;
 
     if confirmation {
         match fs::create_dir_all(path).await {
             Ok(()) => {
+                let _ = lock.acquire().await;
                 write_suc(format!("Created path: {}", path.display()).as_str());
                 return true;
             }
             Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
                 let settings = settings();
+                let permit = lock.acquire().await;
                 let output = Command::new(&settings.superuser_command)
                     .arg("mkdir")
                     .arg("-p")
@@ -43,11 +46,14 @@ pub async fn create_path(path: &Path) -> bool {
                     .output()
                     .await
                     .unwrap();
+                drop(permit);
 
                 if output.status.success() {
+                    let _ = lock.acquire().await;
                     write_suc(format!("Created path (superuser): {}", path.display()).as_str());
                     return true;
                 } else {
+                    let _ = lock.acquire().await;
                     write_err(
                         format!(
                             "Failed, could not create path: {}, Err: {}",
@@ -60,11 +66,20 @@ pub async fn create_path(path: &Path) -> bool {
                 }
             }
             Err(err) => {
-                write_err(format!("Failed, could not create path: {}, Err: {}", path.display(), err).as_str());
+                let _ = lock.acquire().await;
+                write_err(
+                    format!(
+                        "Failed, could not create path: {}, Err: {}",
+                        path.display(),
+                        err
+                    )
+                    .as_str(),
+                );
                 return false;
             }
         }
     } else {
+        let _ = lock.acquire().await;
         write_err(format!("Aborting, could not create path: {}", path.display(),).as_str());
         return false;
     }
@@ -78,7 +93,8 @@ pub fn write_suc(message: &str) {
     println!("{} {}", "[SUCCESS]".green(), message);
 }
 
-pub fn get_confirmation(message: &str) -> bool {
+pub async fn get_confirmation(message: &str, lock: Arc<Semaphore>) -> bool {
+    let _ = lock.acquire().await;
     print!("{} {} {}", "[CONFIRM]".bright_purple(), message, "[Y/n] ");
     io::stdout().flush().unwrap();
 

@@ -15,6 +15,8 @@ async fn write_to_file(path: &Path, content: String, lock: Arc<Semaphore>) {
             write_suc(format!("Wrote to, Path: {}", path.display()).as_str());
         }
         Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
+            let permit = lock.acquire().await; // We lock on superuser, because it probably asks
+                                               // for password
             let output = Command::new(&settings.superuser_command)
                 .arg("bash")
                 .arg("-c")
@@ -24,6 +26,7 @@ async fn write_to_file(path: &Path, content: String, lock: Arc<Semaphore>) {
                 .arg(path)
                 .output()
                 .await;
+            drop(permit);
 
             match output {
                 Ok(output) if output.status.success() => {
@@ -102,9 +105,9 @@ pub async fn process(config: &Config) {
                 // Ensure the parent directories exist
                 if let Some(parent) = file_path.parent() {
                     if !fs::try_exists(parent).await.unwrap() {
-                        if !utils::create_path(parent).await {
+                        if !utils::create_path(parent, lock.clone()).await {
                             return
-                        }
+            }
                     }
                 }
 

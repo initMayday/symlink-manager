@@ -1,4 +1,5 @@
 mod files;
+mod symlinks;
 mod utils;
 
 use mlua::{Lua, LuaSerdeExt};
