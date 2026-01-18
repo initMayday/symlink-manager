@@ -32,7 +32,7 @@ pub async fn create_path(path: &Path, lock: Arc<Semaphore>) -> bool {
     if confirmation {
         match fs::create_dir_all(path).await {
             Ok(()) => {
-                let _ = lock.acquire().await;
+                let _permit = lock.acquire().await;
                 write_suc(format!("Created path: {}", path.display()).as_str());
                 return true;
             }
@@ -49,11 +49,11 @@ pub async fn create_path(path: &Path, lock: Arc<Semaphore>) -> bool {
                 drop(permit);
 
                 if output.status.success() {
-                    let _ = lock.acquire().await;
+                    let _permit = lock.acquire().await;
                     write_suc(format!("Created path (superuser): {}", path.display()).as_str());
                     return true;
                 } else {
-                    let _ = lock.acquire().await;
+                    let _permit = lock.acquire().await;
                     write_err(
                         format!(
                             "Failed, could not create path: {}, Err: {}",
@@ -66,7 +66,7 @@ pub async fn create_path(path: &Path, lock: Arc<Semaphore>) -> bool {
                 }
             }
             Err(err) => {
-                let _ = lock.acquire().await;
+                let _permit = lock.acquire().await;
                 write_err(
                     format!(
                         "Failed, could not create path: {}, Err: {}",
@@ -79,7 +79,7 @@ pub async fn create_path(path: &Path, lock: Arc<Semaphore>) -> bool {
             }
         }
     } else {
-        let _ = lock.acquire().await;
+        let _permit = lock.acquire().await;
         write_err(format!("Aborting, could not create path: {}", path.display(),).as_str());
         return false;
     }

@@ -28,7 +28,7 @@ async fn remove_path(path: &Path, lock: Arc<Semaphore>) -> bool {
 
         match result {
             Ok(()) => {
-                let _ = lock.acquire().await;
+                let _permit = lock.acquire().await;
                 write_suc(format!("Removed path: {}", path.display()).as_str());
                 return true;
             }
@@ -45,11 +45,11 @@ async fn remove_path(path: &Path, lock: Arc<Semaphore>) -> bool {
                 drop(permit);
 
                 if output.status.success() {
-                    let _ = lock.acquire().await;
+                    let _permit = lock.acquire().await;
                     write_suc(format!("Removed path (superuser): {}", path.display()).as_str());
                     return true;
                 } else {
-                    let _ = lock.acquire().await;
+                    let _permit = lock.acquire().await;
                     write_err(
                         format!(
                             "Failed, could not remove path: {}, Err: {}",
@@ -62,7 +62,7 @@ async fn remove_path(path: &Path, lock: Arc<Semaphore>) -> bool {
                 }
             }
             Err(err) => {
-                let _ = lock.acquire().await;
+                let _permit = lock.acquire().await;
                 write_err(
                     format!(
                         "Failed, could not remove path: {}, Err: {}",
@@ -75,7 +75,7 @@ async fn remove_path(path: &Path, lock: Arc<Semaphore>) -> bool {
             }
         }
     } else {
-        let _ = lock.acquire().await;
+        let _permit = lock.acquire().await;
         write_err(format!("Aborting, could not remove path: {}", path.display()).as_str());
         return false;
     }
@@ -84,7 +84,7 @@ async fn remove_path(path: &Path, lock: Arc<Semaphore>) -> bool {
 async fn create_symlink(base_path: &Path, symlink_path: &Path, lock: Arc<Semaphore>) -> bool {
     match unix_fs::symlink(base_path, symlink_path) {
         Ok(()) => {
-            let _ = lock.acquire().await;
+            let _permit = lock.acquire().await;
             write_suc(
                 format!(
                     "Created symlink: {} -> {}",
@@ -109,7 +109,7 @@ async fn create_symlink(base_path: &Path, symlink_path: &Path, lock: Arc<Semapho
             drop(permit);
 
             if output.status.success() {
-                let _ = lock.acquire().await;
+                let _permit = lock.acquire().await;
                 write_suc(
                     format!(
                         "Created symlink (superuser): {} -> {}",
@@ -120,7 +120,7 @@ async fn create_symlink(base_path: &Path, symlink_path: &Path, lock: Arc<Semapho
                 );
                 return true;
             } else {
-                let _ = lock.acquire().await;
+                let _permit = lock.acquire().await;
                 write_err(
                     format!(
                         "Failed, could not create symlink (superuser): {} -> {}, Err: {}",
@@ -134,7 +134,7 @@ async fn create_symlink(base_path: &Path, symlink_path: &Path, lock: Arc<Semapho
             }
         }
         Err(err) => {
-            let _ = lock.acquire().await;
+            let _permit = lock.acquire().await;
             write_err(
                 format!(
                     "Failed, could not create symlink: {} -> {}, Err: {}",
@@ -153,29 +153,66 @@ pub async fn process(config: &Config) {
     let mut set = JoinSet::new();
     let lock = Arc::new(Semaphore::new(1));
 
-    for (base_path, symlink_path) in config.symlinks.clone() {
+    for (symlink_path, base_path) in config.symlinks.clone() {
         let lock = Arc::clone(&lock);
         set.spawn(async move {
-            let file_path = Path::new(&base_path);
+            let base_path = Path::new(&base_path);
             let symlink_path = Path::new(&symlink_path);
-            if fs::try_exists(symlink_path).await.unwrap() {
-                // Check it points to the right place
-                let metadata = fs::symlink_metadata(symlink_path).await.unwrap();
-                if metadata.file_type().is_symlink() {
-                    // Check it points to the right file, else, remove it
-                    if symlink_path == fs::read_link(&symlink_path).await.unwrap() {
-                        return
+            match fs::symlink_metadata(symlink_path).await {
+                Ok(metadata) => {
+                    if metadata.file_type().is_symlink() {
+                        let link_target = match fs::read_link(symlink_path).await {
+                            Ok(target) => target,
+                            Err(err) => {
+                                let _permit = lock.acquire().await;
+                                write_err(
+                                    format!(
+                                        "Failed, could not read symlink target: {}, Err: {}",
+                                        symlink_path.display(),
+                                        err
+                                    )
+                                    .as_str(),
+                                );
+                                return;
+                            }
+                        };
+
+                        let resolved_target = if link_target.is_absolute() {
+                            link_target
+                        } else {
+                            symlink_path
+                                .parent()
+                                .unwrap_or(Path::new(""))
+                                .join(&link_target)
+                        };
+
+                        if resolved_target == base_path {
+                            return;
+                        }
+
+                        remove_path(symlink_path, lock.clone()).await;
                     } else {
-                        remove_path(&symlink_path, lock.clone()).await;
+                        remove_path(symlink_path, lock.clone()).await;
                     }
-                } else {
-                    remove_path(&symlink_path, lock.clone()).await;
+                }
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                Err(err) => {
+                    let _permit = lock.acquire().await;
+                    write_err(
+                        format!(
+                            "Failed, could not stat path: {}, Err: {}",
+                            symlink_path.display(),
+                            err
+                        )
+                        .as_str(),
+                    );
+                    return;
                 }
             }
 
             // Try and now create the symlink - it was invalid before, or didn't exist
             // Ensure the parent directories exist
-            if let Some(parent) = file_path.parent() {
+            if let Some(parent) = symlink_path.parent() {
                 if !fs::try_exists(parent).await.unwrap() {
                     if !utils::create_path(parent, lock.clone()).await {
                         return;
@@ -183,8 +220,7 @@ pub async fn process(config: &Config) {
                 }
             }
 
-            println!("creating {}", file_path.display());
-            create_symlink(file_path, symlink_path, lock).await;
+            create_symlink(base_path, symlink_path, lock).await;
             
         });
     }
