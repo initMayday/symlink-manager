@@ -4,7 +4,7 @@ use tokio::{fs, process::Command, sync::Semaphore, task::JoinSet};
 
 use crate::{
     Config,
-    utils::{get_confirmation, write_err, write_suc},
+    utils::{self, write_err, write_suc},
 };
 
 async fn write_to_file(path: &Path, content: String, lock: Arc<Semaphore>) {
@@ -102,27 +102,7 @@ pub async fn process(config: &Config) {
                 // Ensure the parent directories exist
                 if let Some(parent) = file_path.parent() {
                     if !fs::try_exists(parent).await.unwrap() {
-                        let confirmation = get_confirmation(
-                            format!(
-                                "The path {}, does not exist. It must exist in order to create {}. Would you like to do this?",
-                                parent.display(),
-                                file_path.display(),
-                            ).as_str()
-                        );
-
-                        let mut created_path = confirmation;
-
-                        if confirmation {
-                            if let Err(err) = fs::create_dir_all(parent).await {
-                                write_err(format!("Failed to create path: {}, error: {}", parent.display(), err).as_str());
-                                created_path = false;
-                            }
-                        }
-
-                        if created_path {
-                            write_suc(format!("Created path: {}", parent.display()).as_str());
-                        } else {
-                            write_err(format!("Aborting, could not create path: {}", parent.display()).as_str());
+                        if !utils::create_path(parent).await {
                             return
                         }
                     }
@@ -130,12 +110,9 @@ pub async fn process(config: &Config) {
 
                 // Create the file, and write to it
                 write_to_file(file_path, new_content, lock).await;
-
-
             }
         });
     }
 
-    while let Some(_res) = set.join_next().await {
-    }
+    while let Some(_res) = set.join_next().await {} // We don't actually do anything as of now
 }

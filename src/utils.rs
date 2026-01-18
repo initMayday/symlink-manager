@@ -19,31 +19,54 @@ pub fn settings() -> &'static Settings {
     SETTINGS.get().expect("settings not initialized")
 }
 
-pub async fn create_path(path: &Path) -> io::Result<()> {
-    match fs::create_dir_all(path).await {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
-            let settings = settings();
-            let output = Command::new(&settings.superuser_command)
-                .arg("mkdir")
-                .arg("-p")
-                .arg(path)
-                .output()
-                .await?;
+pub async fn create_path(path: &Path) -> bool {
+    let confirmation = get_confirmation(
+        format!(
+            "The path {}, does not exist. Would you like to do this?",
+            path.display(),
+        )
+        .as_str(),
+    );
 
-            if output.status.success() {
-                Ok(())
-            } else {
-                Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!(
-                        "superuser mkdir failed: {}",
-                        String::from_utf8_lossy(&output.stderr)
-                    ),
-                ))
+    if confirmation {
+        match fs::create_dir_all(path).await {
+            Ok(()) => {
+                write_suc(format!("Created path: {}", path.display()).as_str());
+                return true;
+            }
+            Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
+                let settings = settings();
+                let output = Command::new(&settings.superuser_command)
+                    .arg("mkdir")
+                    .arg("-p")
+                    .arg(path)
+                    .output()
+                    .await
+                    .unwrap();
+
+                if output.status.success() {
+                    write_suc(format!("Created path (superuser): {}", path.display()).as_str());
+                    return true;
+                } else {
+                    write_err(
+                        format!(
+                            "Failed, could not create path: {}, Err: {}",
+                            path.display(),
+                            String::from_utf8_lossy(&output.stderr)
+                        )
+                        .as_str(),
+                    );
+                    return false;
+                }
+            }
+            Err(err) => {
+                write_err(format!("Failed, could not create path: {}, Err: {}", path.display(), err).as_str());
+                return false;
             }
         }
-        Err(err) => Err(err),
+    } else {
+        write_err(format!("Aborting, could not create path: {}", path.display(),).as_str());
+        return false;
     }
 }
 
