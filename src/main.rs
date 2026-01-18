@@ -3,7 +3,6 @@ mod utils;
 
 use mlua::{Lua, LuaSerdeExt};
 use serde::Deserialize;
-use tokio::task::JoinSet;
 use std::{collections::HashMap, fs};
 
 #[derive(Debug, Deserialize)]
@@ -14,10 +13,9 @@ struct Config {
     settings: Settings,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all(deserialize = "PascalCase"))]
 struct Settings {
-    add_symlink_confirmation: bool,
     add_path_confirmation: bool,
     remove_path_confirmation: bool,
     cache_path: String,
@@ -33,6 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let value = chunk.eval::<mlua::Value>()?;
     let config: Config = lua.from_value(value)?;
 
+    utils::init_settings(config.settings.clone());
     files::process(&config).await;
 
     Ok(())

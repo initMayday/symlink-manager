@@ -1,6 +1,6 @@
-use std::{path::Path, sync::Arc};
+use std::{io, path::Path, sync::Arc};
 
-use tokio::{fs, sync::Semaphore, task::JoinSet};
+use tokio::{fs, process::Command, sync::Semaphore, task::JoinSet};
 
 use crate::{
     Config,
@@ -8,10 +8,54 @@ use crate::{
 };
 
 async fn write_to_file(path: &Path, content: String, lock: Arc<Semaphore>) {
-    match fs::write(path, content).await {
+    let settings = crate::utils::settings();
+    match fs::write(path, content.as_bytes()).await {
         Ok(_) => {
             let _ = lock.acquire().await;
             write_suc(format!("Wrote to, Path: {}", path.display()).as_str());
+        }
+        Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
+            let output = Command::new(&settings.superuser_command)
+                .arg("bash")
+                .arg("-c")
+                .arg("printf '%s' \"$1\" > \"$2\"")
+                .arg("--")
+                .arg(&content)
+                .arg(path)
+                .output()
+                .await;
+
+            match output {
+                Ok(output) if output.status.success() => {
+                    let _ = lock.acquire().await;
+                    write_suc(
+                        format!("Wrote to (superuser), Path: {}", path.display()).as_str(),
+                    );
+                }
+                Ok(output) => {
+                    let _ = lock.acquire().await;
+                    write_err(
+                        format!(
+                            "Failed to write to file (superuser), Path: {}, Exit: {}, Stderr: {}",
+                            path.display(),
+                            output.status,
+                            String::from_utf8_lossy(&output.stderr),
+                        )
+                        .as_str(),
+                    );
+                }
+                Err(err) => {
+                    let _ = lock.acquire().await;
+                    write_err(
+                        format!(
+                            "Failed to write to file (superuser), Path: {}, Error: {}",
+                            path.display(),
+                            err
+                        )
+                        .as_str(),
+                    );
+                }
+            }
         }
         Err(err) => {
             let _ = lock.acquire().await;

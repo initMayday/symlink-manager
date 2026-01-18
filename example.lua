@@ -9,7 +9,6 @@ local Configuration = {
     },
 
     Settings = {
-        AddSymlinkConfirmation = false,
         AddPathConfirmation = true,
         RemovePathConfirmation = true,
         CachePath = "/home/user/.config/",

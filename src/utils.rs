@@ -1,6 +1,51 @@
-use std::io::{self, Write};
+use std::{
+    io::{self, Write},
+    path::Path,
+    sync::OnceLock,
+};
 
 use owo_colors::OwoColorize;
+use tokio::{fs, process::Command};
+
+use crate::Settings;
+
+static SETTINGS: OnceLock<Settings> = OnceLock::new();
+
+pub fn init_settings(settings: Settings) {
+    let _ = SETTINGS.set(settings);
+}
+
+pub fn settings() -> &'static Settings {
+    SETTINGS.get().expect("settings not initialized")
+}
+
+pub async fn create_path(path: &Path) -> io::Result<()> {
+    match fs::create_dir_all(path).await {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
+            let settings = settings();
+            let output = Command::new(&settings.superuser_command)
+                .arg("mkdir")
+                .arg("-p")
+                .arg(path)
+                .output()
+                .await?;
+
+            if output.status.success() {
+                Ok(())
+            } else {
+                Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!(
+                        "superuser mkdir failed: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    ),
+                ))
+            }
+        }
+        Err(err) => Err(err),
+    }
+}
 
 pub fn write_err(message: &str) {
     println!("{} {}", "[ERROR]".red(), message);
