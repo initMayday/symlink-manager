@@ -68,9 +68,8 @@ async fn write_to_file(path: &Path, content: String, lock: Arc<Semaphore>) {
     }
 }
 
-pub async fn process(config: &Config) {
+pub async fn process(config: &Config, lock: Arc<Semaphore>) {
     let mut set = JoinSet::new();
-    let lock = Arc::new(Semaphore::new(1));
 
     for (path, new_content) in config.files.clone() {
         let lock = Arc::clone(&lock);

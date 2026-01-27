@@ -140,9 +140,8 @@ async fn create_symlink(base_path: &Path, symlink_path: &Path, lock: Arc<Semapho
     }
 }
 
-pub async fn process(config: &Config) {
+pub async fn process(config: &Config, lock: Arc<Semaphore>) {
     let mut set = JoinSet::new();
-    let lock = Arc::new(Semaphore::new(1));
 
     for (symlink_path, base_path) in config.symlinks.clone() {
         let lock = Arc::clone(&lock);

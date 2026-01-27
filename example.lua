@@ -11,7 +11,6 @@ local Configuration = {
     Settings = {
         AddPathConfirmation = true,
         RemovePathConfirmation = true,
-        CachePath = "/home/user/.config/",
         SuperuserCommand = "sudo",
     }
 }

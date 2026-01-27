@@ -80,6 +80,10 @@ pub async fn create_path(path: &Path, lock: Arc<Semaphore>) -> bool {
     }
 }
 
+pub fn write_info(message: &str) {
+    println!("{} {}", "[INFO]", message);
+}
+
 pub fn write_err(message: &str) {
     println!("{} {}", "[ERROR]".red(), message);
 }
